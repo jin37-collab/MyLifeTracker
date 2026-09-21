@@ -19,16 +19,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Make Gradle executable
+        working-directory: MyLifeTracker
         run: chmod +x gradlew
 
       - name: Build Debug APK
+        working-directory: MyLifeTracker
         run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MyLifeTracker-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: MyLifeTracker/app/build/outputs/apk/debug/app-debug.apk
