@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalTime
 
-class TrackerStore(context: Context) {
+class TrackerStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("tracker_store", Context.MODE_PRIVATE)
 
     fun saveTasks(items: List<TaskItem>) {
@@ -34,7 +34,7 @@ class TrackerStore(context: Context) {
                     title = o.getString("title"),
                     category = TaskCategory.valueOf(o.getString("category")),
                     dueDate = o.optString("dueDate").takeIf { it.isNotBlank() && it != "null" }?.let(LocalDate::parse),
-                    completed = o.getBoolean("completed")
+                    completed = o.optBoolean("completed", false)
                 ))
             }
         }
@@ -134,9 +134,10 @@ class TrackerStore(context: Context) {
     }.getOrDefault(emptyList())
 
     fun saveIncomeGoal(value: Int) = prefs.edit().putInt("incomeGoal", value).apply()
+    fun loadIncomeGoal(): Int = prefs.getInt("incomeGoal", 1_000_000)
+
     fun isInitialized(): Boolean = prefs.getBoolean("initialized", false)
     fun markInitialized() = prefs.edit().putBoolean("initialized", true).apply()
-    fun loadIncomeGoal(): Int = prefs.getInt("incomeGoal", 1_000_000)
 
     fun saveCards(cards: List<CardProfile>) {
         val arr = JSONArray()
@@ -160,6 +161,30 @@ class TrackerStore(context: Context) {
             }
         }
     }.getOrElse { defaultCards() }
+
+    fun lastModified(): Long = prefs.getLong("lastModified", 0L)
+    fun setLastModified(value: Long) = prefs.edit().putLong("lastModified", value).apply()
+
+    fun snapshot(): TrackerSnapshot = TrackerSnapshot(
+        tasks = loadTasks(),
+        schedules = loadSchedules(),
+        expenses = loadExpenses(),
+        incomes = loadIncomes(),
+        cards = loadCards(),
+        incomeGoal = loadIncomeGoal(),
+        updatedAt = lastModified()
+    )
+
+    fun replaceWith(snapshot: TrackerSnapshot) {
+        saveTasks(snapshot.tasks)
+        saveSchedules(snapshot.schedules)
+        saveExpenses(snapshot.expenses)
+        saveIncomes(snapshot.incomes)
+        saveCards(snapshot.cards.ifEmpty { defaultCards() })
+        saveIncomeGoal(snapshot.incomeGoal.coerceAtLeast(1))
+        setLastModified(snapshot.updatedAt)
+        markInitialized()
+    }
 
     companion object {
         fun defaultCards() = listOf(

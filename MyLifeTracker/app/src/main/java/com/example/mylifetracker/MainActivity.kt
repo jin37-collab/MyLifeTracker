@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -128,6 +129,7 @@ private fun ScreenTitle(title: String, action: (@Composable () -> Unit)? = null)
 
 @Composable
 private fun HomeScreen(vm: TrackerViewModel, onTab: (AppTab) -> Unit) {
+    var showAccount by remember { mutableStateOf(false) }
     val today = LocalDate.now()
     val pending = vm.tasks.count { !it.completed }
     val todaySchedules = vm.schedules.count { it.date == today }
@@ -142,7 +144,17 @@ private fun HomeScreen(vm: TrackerViewModel, onTab: (AppTab) -> Unit) {
         contentPadding = PaddingValues(bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { ScreenTitle("홈") }
+        item {
+            ScreenTitle("홈") {
+                IconButton(onClick = { showAccount = true }) {
+                    Icon(
+                        if (vm.isLoggedIn) Icons.Default.CloudDone else Icons.Default.AccountCircle,
+                        contentDescription = "계정 및 동기화",
+                        tint = if (vm.isLoggedIn) Green else Muted
+                    )
+                }
+            }
+        }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 SectionLabel("이번 달 요약")
@@ -181,6 +193,9 @@ private fun HomeScreen(vm: TrackerViewModel, onTab: (AppTab) -> Unit) {
                 IncomeProgressMini(vm, Modifier.weight(1f)) { onTab(AppTab.INCOME) }
             }
         }
+    }
+    if (showAccount) {
+        AccountDialog(vm = vm, onDismiss = { showAccount = false })
     }
 }
 
@@ -315,14 +330,14 @@ private fun TasksScreen(vm: TrackerViewModel) {
         ) {
             if (due.isNotEmpty()) {
                 item { GroupHeader("마감 일정 ${due.size}", "기한이 임박한 할 일이 먼저 보여요") }
-                items(due, key = { it.id }) { task -> TaskRow(task, vm::toggleTask, vm::deleteTask) }
+                items(due) { task -> TaskRow(task, vm::toggleTask, vm::deleteTask) }
             }
             item { GroupHeader("일반 할 일 ${noDue.size}", "마감일이 없는 할 일이에요") }
             if (noDue.isEmpty()) item { EmptyCard("마감일 없는 할 일이 없어요") }
-            items(noDue, key = { it.id }) { task -> TaskRow(task, vm::toggleTask, vm::deleteTask) }
+            items(noDue) { task -> TaskRow(task, vm::toggleTask, vm::deleteTask) }
             if (completed.isNotEmpty()) {
                 item { GroupHeader("완료 ${completed.size}", "완료한 할 일이에요") }
-                items(completed, key = { it.id }) { task -> TaskRow(task, vm::toggleTask, vm::deleteTask) }
+                items(completed) { task -> TaskRow(task, vm::toggleTask, vm::deleteTask) }
             }
             item { Spacer(Modifier.height(16.dp)) }
         }
@@ -450,7 +465,7 @@ private fun ScheduleScreen(vm: TrackerViewModel) {
                 if (dayItems.isEmpty()) {
                     item(key = "empty-$date") { EmptyScheduleDay() }
                 } else {
-                    items(dayItems, key = { it.id }) { item -> ScheduleRow(item, vm::deleteSchedule) }
+                    items(dayItems) { item -> ScheduleRow(item, vm::deleteSchedule) }
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
@@ -817,3 +832,90 @@ private fun categoryColor(category: TaskCategory) = when (category) {
 private fun money(value: Int): String = NumberFormat.getNumberInstance(Locale.KOREA).format(value) + "원"
 private fun dateShort(date: LocalDate): String = date.format(DateTimeFormatter.ofPattern("M/d (E)", Locale.KOREAN))
 private fun dateTiny(date: LocalDate): String = date.format(DateTimeFormatter.ofPattern("M/d"))
+
+
+@Composable
+private fun AccountDialog(vm: TrackerViewModel, onDismiss: () -> Unit) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (vm.isLoggedIn) "계정 및 동기화" else "클라우드 로그인")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!vm.cloudConfigured) {
+                    Text("클라우드 설정이 아직 연결되지 않았어요.", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Firebase 설정을 한 번 연결한 뒤 새 APK를 빌드하면, 로그인으로 다른 기기와 데이터를 이어서 사용할 수 있어요.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                } else if (vm.isLoggedIn) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudDone, null, tint = Green)
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(vm.currentUserEmail.orEmpty(), fontWeight = FontWeight.Bold)
+                            Text(if (vm.isSyncing) "동기화 중…" else "클라우드 연결됨", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Text(
+                        "앱을 삭제하거나 다른 휴대폰으로 바꿔도 같은 계정으로 로그인하면 저장된 데이터를 다시 불러옵니다.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("이메일") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("비밀번호") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("처음이면 ‘새 계정 만들기’를 누르면 돼요.", color = Muted, fontSize = 11.sp)
+                }
+                vm.cloudMessage?.let { message ->
+                    Surface(shape = RoundedCornerShape(10.dp), color = Blue.copy(alpha = .07f)) {
+                        Text(message, modifier = Modifier.padding(10.dp), fontSize = 11.sp, color = Ink)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                !vm.cloudConfigured -> TextButton(onClick = onDismiss) { Text("확인") }
+                vm.isLoggedIn -> Button(onClick = vm::syncNow, enabled = !vm.isSyncing) {
+                    Text(if (vm.isSyncing) "동기화 중" else "지금 동기화")
+                }
+                else -> Button(
+                    onClick = { vm.signIn(email.trim(), password) },
+                    enabled = email.isNotBlank() && password.length >= 6 && !vm.isSyncing
+                ) { Text(if (vm.isSyncing) "로그인 중" else "로그인") }
+            }
+        },
+        dismissButton = {
+            when {
+                !vm.cloudConfigured -> Unit
+                vm.isLoggedIn -> Row {
+                    TextButton(onClick = vm::logout) { Text("로그아웃") }
+                    TextButton(onClick = onDismiss) { Text("닫기") }
+                }
+                else -> TextButton(
+                    onClick = { vm.signUp(email.trim(), password) },
+                    enabled = email.isNotBlank() && password.length >= 6 && !vm.isSyncing
+                ) { Text("새 계정 만들기") }
+            }
+        }
+    )
+}

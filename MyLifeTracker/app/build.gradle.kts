@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+fun quotedBuildConfig(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val firebaseApiKey = System.getenv("FIREBASE_API_KEY") ?: ""
+val firebaseDatabaseUrl = System.getenv("FIREBASE_DATABASE_URL") ?: ""
+
+val signingStorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: ""
+val signingStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
+val signingKeyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: ""
+val signingKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: ""
+val hasCiSigning = listOf(signingStorePath, signingStorePassword, signingKeyAlias, signingKeyPassword).all { it.isNotBlank() }
+
 android {
     namespace = "com.example.mylifetracker"
     compileSdk = 35
@@ -12,12 +23,35 @@ android {
         applicationId = "com.example.mylifetracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+
+        buildConfigField("String", "FIREBASE_API_KEY", quotedBuildConfig(firebaseApiKey))
+        buildConfigField("String", "FIREBASE_DATABASE_URL", quotedBuildConfig(firebaseDatabaseUrl))
+    }
+
+    signingConfigs {
+        if (hasCiSigning) {
+            create("ci") {
+                storeFile = file(signingStorePath)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (hasCiSigning) {
+                signingConfig = signingConfigs.getByName("ci")
+            }
+        }
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -43,6 +77,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
